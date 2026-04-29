@@ -41,6 +41,7 @@ This will pull all secrets from the specified Vault path, filter them by the giv
 | `--role` | Role filter to apply | `default` |
 | `--output` | Output file path | `.env` |
 | `--overwrite` | Overwrite existing file | `false` |
+| `--dry-run` | Print secrets to stdout without writing to file | `false` |
 
 ### Example Output
 
@@ -49,6 +50,19 @@ DB_HOST=db.internal
 DB_PASSWORD=supersecret
 API_KEY=abc123
 ```
+
+---
+
+## Environment Variables
+
+Instead of passing flags each time, you can configure vaultpipe using environment variables:
+
+| Variable | Equivalent Flag |
+|----------|-----------------|
+| `VAULT_ADDR` | Vault server address |
+| `VAULT_TOKEN` | Vault authentication token |
+| `VAULTPIPE_ROLE` | `--role` |
+| `VAULTPIPE_OUTPUT` | `--output` |
 
 ---
 
