@@ -1,50 +1,39 @@
-// Package config handles loading and validating vaultpipe configuration
-// from YAML files and environment variables.
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"time"
 
-	"gopkg.in/yaml.v3"
+	"github.com/BurntSushi/toml"
 )
 
-// Config holds the top-level vaultpipe configuration.
+// Config holds all runtime configuration for vaultpipe.
 type Config struct {
-	// VaultAddr is the address of the Vault server.
-	VaultAddr string `yaml:"vault_addr"`
-
-	// VaultToken is the token used to authenticate with Vault.
-	// Can also be set via VAULT_TOKEN environment variable.
-	VaultToken string `yaml:"vault_token"`
-
-	// SecretPath is the Vault KV path to read secrets from.
-	SecretPath string `yaml:"secret_path"`
-
-	// OutputFile is the path to the .env file to write.
-	OutputFile string `yaml:"output_file"`
-
-	// Role defines which secret keys this instance is allowed to consume.
-	Role string `yaml:"role"`
-
-	// Backup controls whether a backup of the existing .env file is created.
-	Backup bool `yaml:"backup"`
+	VaultAddr  string        `toml:"vault_addr"`
+	VaultToken string        `toml:"vault_token"`
+	SecretPath string        `toml:"secret_path"`
+	OutputFile string        `toml:"output_file"`
+	Role       string        `toml:"role"`
+	AuditFile  string        `toml:"audit_file"`
+	CacheFile  string        `toml:"cache_file"`
+	CacheTTL   time.Duration `toml:"cache_ttl"`
 }
 
-// Load reads a YAML config file from the given path and returns a Config.
-// Environment variables take precedence over file values for sensitive fields.
+// Load reads a TOML config file and merges environment variable overrides.
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("config: reading file %q: %w", path, err)
+	cfg := &Config{
+		OutputFile: ".env",
+		CacheTTL:   5 * time.Minute,
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("config: parsing YAML: %w", err)
+	if _, err := toml.DecodeFile(path, cfg); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("config: decode %s: %w", path, err)
+		}
 	}
 
-	// Environment variable overrides.
 	if v := os.Getenv("VAULT_ADDR"); v != "" {
 		cfg.VaultAddr = v
 	}
@@ -52,26 +41,19 @@ func Load(path string) (*Config, error) {
 		cfg.VaultToken = v
 	}
 
-	if err := cfg.Validate(); err != nil {
-		return nil, err
+	if cfg.VaultAddr == "" {
+		return nil, errors.New("config: vault_addr is required")
+	}
+	if cfg.VaultToken == "" {
+		return nil, errors.New("config: vault_token is required (set VAULT_TOKEN or vault_token in config)")
+	}
+	if cfg.SecretPath == "" {
+		return nil, errors.New("config: secret_path is required")
 	}
 
-	return &cfg, nil
-}
+	if cfg.CacheFile == "" {
+		cfg.CacheFile = ".vaultpipe_cache.json"
+	}
 
-// Validate checks that required fields are present.
-func (c *Config) Validate() error {
-	if c.VaultAddr == "" {
-		return fmt.Errorf("config: vault_addr is required")
-	}
-	if c.VaultToken == "" {
-		return fmt.Errorf("config: vault_token is required (set vault_token in config or VAULT_TOKEN env var)")
-	}
-	if c.SecretPath == "" {
-		return fmt.Errorf("config: secret_path is required")
-	}
-	if c.OutputFile == "" {
-		c.OutputFile = ".env"
-	}
-	return nil
+	return cfg, nil
 }
